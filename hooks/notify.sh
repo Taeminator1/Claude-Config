@@ -150,7 +150,11 @@ case "$EVENT" in
 
     GROUP_ID="$PROJECT"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
-    ICON="$HOME/.claude/hooks/assets/claude-question.webp"
+    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
+      ICON="$HOME/.claude/hooks/assets/claude-question-dark.webp"
+    else
+      ICON="$HOME/.claude/hooks/assets/claude-question-light.webp"
+    fi
     ;;
   Stop)
     TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
