@@ -15,6 +15,8 @@ if [ -n "$SESSION_ID" ]; then
     "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
 fi
 ALERTER="/opt/homebrew/bin/alerter"
+SUMMARY_MAX_LEN="${CLAUDE_NOTIFY_SUMMARY_MAX:-80}"
+MSG_MAX_LEN="${CLAUDE_NOTIFY_MSG_MAX:-200}"
 
 # Extract text from transcript JSONL.
 # mode=first (Stop): last assistant message text; fallback = first non-empty line.
@@ -115,10 +117,10 @@ _summarize_with_claude() {
     | tr -d '\r' \
     | awk 'NF{print; exit}'
   )"
-  printf '%s' "${summary:0:80}"
+  printf '%s' "${summary:0:$SUMMARY_MAX_LEN}"
 }
 
-_SYS_COMMON="당신은 요약기입니다. 80자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
+_SYS_COMMON="당신은 요약기입니다. ${SUMMARY_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 case "$EVENT" in
   PreToolUse)
@@ -145,7 +147,7 @@ case "$EVENT" in
     MSG=""
     case "$RAW_MSG" in
       *permission*|*Permission*|*권한*)
-        MSG="${RAW_MSG:0:120}"
+        MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
         ;;
       *)
         TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
@@ -163,7 +165,7 @@ case "$EVENT" in
             [ -z "$MSG" ] && MSG="${FALLBACK}"
           fi
         fi
-        [ -z "$MSG" ] && MSG="${RAW_MSG:0:120}"
+        [ -z "$MSG" ] && MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
         ;;
     esac
 
