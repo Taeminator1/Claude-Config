@@ -1,11 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Skill(update-config)"
+      "Skill(update-config)",
+      "Edit(~/.claude/hooks/**)"
     ],
     "defaultMode": "plan"
   },
   "model": "opus[1m]",
+  "effortLevel": "xhigh",
   "hooks": {
     "PreToolUse": [
       {
@@ -14,6 +16,15 @@
           {
             "type": "command",
             "command": "rtk hook claude"
+          }
+        ]
+      },
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/notify.sh"
           }
         ]
       }

@@ -79,13 +79,17 @@ if mode == "last":
         if last_text:
             break
 else:
-    # Stop: 마지막 assistant 레코드의 텍스트 블록 추출
-    if assistants:
-        for c in assistants[-1].get("message", {}).get("content", []):
+    # Stop: 텍스트 블록이 있는 가장 최근 assistant 레코드 추출
+    for record in reversed(assistants):
+        text_block = ""
+        for c in record.get("message", {}).get("content", []):
             if isinstance(c, dict) and c.get("type") == "text":
                 t = c.get("text", "").strip()
                 if t:
-                    last_text = t
+                    text_block = t
+        if text_block:
+            last_text = text_block
+            break
 
 fallback = (last_line if mode == "last" else first_line)(last_text) if last_text else ""
 sys.stdout.write(last_text + "\x1f" + fallback)
@@ -117,10 +121,25 @@ _summarize_with_claude() {
 _SYS_COMMON="당신은 요약기입니다. 80자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 case "$EVENT" in
+  PreToolUse)
+    TOOL_NAME="$(jq -r '.tool_name // empty' <<<"$PAYLOAD")"
+    [ "$TOOL_NAME" != "ExitPlanMode" ] && exit 0
+
+    MSG="실행 승인이 필요합니다"
+    GROUP_ID="$SESSION_ID"
+    TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
+      ICON="$HOME/.claude/hooks/assets/claude-question-dark.webp"
+    else
+      ICON="$HOME/.claude/hooks/assets/claude-question-light.webp"
+    fi
+    ;;
   Notification)
     RAW_MSG="$(jq -r '.message // "입력이 필요합니다"' <<<"$PAYLOAD")"
     case "$RAW_MSG" in
       *"waiting for your input"*|*"입력을 기다리"*) exit 0 ;;
+      *"needs your attention"*|*"주의가 필요"*)
+        RAW_MSG="확인이 필요합니다" ;;
     esac
 
     MSG=""
@@ -161,6 +180,8 @@ case "$EVENT" in
     LAST_TEXT=""
     FALLBACK=""
     if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+      # transcript 쓰기가 완료되길 잠시 대기
+      sleep 0.3
       EXTRACTED="$(_extract_last_assistant_text "$TRANSCRIPT" first)"
       LAST_TEXT="${EXTRACTED%$'\x1f'*}"
       FALLBACK="${EXTRACTED##*$'\x1f'}"
