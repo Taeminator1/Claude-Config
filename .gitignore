@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Runtime state & caches
+cache/
+debug/
+file-history/
+image-cache/
+paste-cache/
+shell-snapshots/
+telemetry/
+todos/
+tasks/
+.last-cleanup
+
+# Sessions & history
+sessions/
+projects/
+history.jsonl
+
+# IDE session locks (contain auth tokens)
+ide/
+
+# Working artifacts
+plans/
+backups/
+plugins/
+
+# Local / machine-specific settings
+settings.local.json
+settings.json.bak
+
+# Cache JSON
+mcp-needs-auth-cache.json
+stats-cache.json
+policy-limits.json
