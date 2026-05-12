@@ -4,10 +4,9 @@
       "Skill(update-config)",
       "Edit(~/.claude/hooks/**)"
     ],
-    "defaultMode": "plan"
+    "defaultMode": "bypassPermissions"
   },
   "model": "opus[1m]",
-  "effortLevel": "xhigh",
   "hooks": {
     "PreToolUse": [
       {
@@ -55,6 +54,8 @@
     "command": "bash ~/.claude/statusline-command.sh"
   },
   "language": "Korean",
+  "effortLevel": "xhigh",
   "autoMemoryEnabled": true,
-  "theme": "auto"
+  "theme": "auto",
+  "skipDangerousModePermissionPrompt": true
 }
