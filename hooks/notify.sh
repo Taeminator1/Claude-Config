@@ -15,7 +15,7 @@ if [ -n "$SESSION_ID" ]; then
     "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
 fi
 ALERTER="/opt/homebrew/bin/alerter"
-SUMMARY_MAX_LEN="${CLAUDE_NOTIFY_SUMMARY_MAX:-80}"
+SHORT_MAX_LEN="${CLAUDE_NOTIFY_SHORT_MAX:-80}"
 MSG_MAX_LEN="${CLAUDE_NOTIFY_MSG_MAX:-200}"
 
 # Extract text from transcript JSONL.
@@ -24,7 +24,7 @@ MSG_MAX_LEN="${CLAUDE_NOTIFY_MSG_MAX:-200}"
 # Output: LAST_TEXT\x1fFALLBACK
 _extract_last_assistant_text() {
   local transcript="$1" mode="${2:-first}"
-  python3 - "$transcript" "$mode" 2>/dev/null <<'PYEOF'
+  python3 - "$transcript" "$mode" "$SHORT_MAX_LEN" 2>/dev/null <<'PYEOF'
 import json, re, sys
 
 def strip_md(line):
@@ -43,17 +43,18 @@ def first_line(text):
     for line in text.splitlines():
         line = strip_md(line)
         if len(line) >= 5:
-            return line[:80] + ('…' if len(line) > 80 else '')
+            return line[:max_len] + ('…' if len(line) > max_len else '')
     return ""
 
 def last_line(text):
     for line in reversed(text.splitlines()):
         line = strip_md(line)
         if len(line) >= 5:
-            return line[:80] + ('…' if len(line) > 80 else '')
+            return line[:max_len] + ('…' if len(line) > max_len else '')
     return ""
 
 mode = sys.argv[2] if len(sys.argv) > 2 else "first"
+max_len = int(sys.argv[3]) if len(sys.argv) > 3 else 80
 assistants = []
 try:
     with open(sys.argv[1]) as f:
@@ -117,10 +118,10 @@ _summarize_with_claude() {
     | tr -d '\r' \
     | awk 'NF{print; exit}'
   )"
-  printf '%s' "${summary:0:$SUMMARY_MAX_LEN}"
+  printf '%s' "${summary:0:$SHORT_MAX_LEN}"
 }
 
-_SYS_COMMON="당신은 요약기입니다. ${SUMMARY_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
+_SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 case "$EVENT" in
   PreToolUse)
