@@ -18,6 +18,18 @@ sessions/
 projects/
 history.jsonl
 
+# Caveman runtime state
+.caveman-active
+.caveman-history.jsonl
+.caveman-statusline-suffix
+
+# Caveman install artifacts
+.agents/
+.claude/
+hooks/caveman-*
+hooks/package.json
+skills-lock.json
+
 # IDE session locks (contain auth tokens)
 ide/
 
