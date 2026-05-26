@@ -48,4 +48,13 @@ else
   rate_str="-"
 fi
 
-printf '%s | %s | %s' "$model" "$context_str" "$rate_str"
+FLAG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-active"
+if [ -f "$FLAG" ] && [ ! -L "$FLAG" ]; then
+  caveman_mode=$(head -c 64 "$FLAG" 2>/dev/null | tr -d '\n\r' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')
+fi
+
+if [ -n "$caveman_mode" ]; then
+  printf '%s | %s | %s | caveman %s' "$model" "$context_str" "$rate_str" "$caveman_mode"
+else
+  printf '%s | %s | %s | caveman off' "$model" "$context_str" "$rate_str"
+fi
