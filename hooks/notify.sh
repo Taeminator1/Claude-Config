@@ -25,13 +25,12 @@ fi
 ICON_DONE="$HOME/.claude/hooks/assets/claude-done.webp"
 SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
-# Extract text from transcript JSONL.
-# mode=first (Stop): last assistant message text; fallback = first non-empty line.
-# mode=last (Notification): latest AskUserQuestion question text; fallback = last non-empty line.
+# Extract text from transcript JSONL for Stop event.
+# Finds last assistant message with text content.
 # Output: LAST_TEXT\x1fFALLBACK
 _extract_last_assistant_text() {
-  local transcript="$1" mode="${2:-first}"
-  python3 - "$transcript" "$mode" "$SHORT_MAX_LEN" 2>/dev/null <<'PYEOF'
+  local transcript="$1"
+  python3 - "$transcript" "$SHORT_MAX_LEN" 2>/dev/null <<'PYEOF'
 import json, re, sys
 
 def strip_md(line):
@@ -53,15 +52,7 @@ def first_line(text):
             return line[:max_len] + ('…' if len(line) > max_len else '')
     return ""
 
-def last_line(text):
-    for line in reversed(text.splitlines()):
-        line = strip_md(line)
-        if len(line) >= 5:
-            return line[:max_len] + ('…' if len(line) > max_len else '')
-    return ""
-
-mode = sys.argv[2] if len(sys.argv) > 2 else "first"
-max_len = int(sys.argv[3]) if len(sys.argv) > 3 else 80
+max_len = int(sys.argv[2]) if len(sys.argv) > 2 else 80
 assistants = []
 try:
     with open(sys.argv[1]) as f:
@@ -76,32 +67,18 @@ except Exception:
     pass
 
 last_text = ""
-if mode == "last":
-    # Notification: 전체 기록을 역순으로 훑어 가장 최근 AskUserQuestion 질문 추출
-    for record in reversed(assistants):
-        for c in reversed(record.get("message", {}).get("content", [])):
-            if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") == "AskUserQuestion":
-                questions = c.get("input", {}).get("questions", [])
-                qs = [q.get("question", "").strip() for q in questions if q.get("question", "").strip()]
-                if qs:
-                    last_text = " / ".join(qs)
-                break
-        if last_text:
-            break
-else:
-    # Stop: 텍스트 블록이 있는 가장 최근 assistant 레코드 추출
-    for record in reversed(assistants):
-        text_block = ""
-        for c in record.get("message", {}).get("content", []):
-            if isinstance(c, dict) and c.get("type") == "text":
-                t = c.get("text", "").strip()
-                if t:
-                    text_block = t
-        if text_block:
-            last_text = text_block
-            break
+for record in reversed(assistants):
+    text_block = ""
+    for c in record.get("message", {}).get("content", []):
+        if isinstance(c, dict) and c.get("type") == "text":
+            t = c.get("text", "").strip()
+            if t:
+                text_block = t
+    if text_block:
+        last_text = text_block
+        break
 
-fallback = (last_line if mode == "last" else first_line)(last_text) if last_text else ""
+fallback = first_line(last_text) if last_text else ""
 sys.stdout.write(last_text + "\x1f" + fallback)
 PYEOF
 }
@@ -131,47 +108,57 @@ _summarize_with_claude() {
 case "$EVENT" in
   PreToolUse)
     TOOL_NAME="$(jq -r '.tool_name // empty' <<<"$PAYLOAD")"
-    [ "$TOOL_NAME" != "ExitPlanMode" ] && exit 0
-
-    MSG="실행 승인이 필요합니다"
-    GROUP_ID="$SESSION_ID"
-    TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
-    ICON="$ICON_QUESTION"
+    case "$TOOL_NAME" in
+      ExitPlanMode)
+        MSG="실행 승인이 필요합니다"
+        GROUP_ID="${SESSION_ID}-question"
+        TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+        ICON="$ICON_QUESTION"
+        ;;
+      AskUserQuestion)
+        ICON="$ICON_QUESTION"
+        GROUP_ID="${SESSION_ID}-question"
+        TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+        (
+          RAW_TEXT="$(jq -r '[.tool_input.questions[].question // empty] | join(" / ")' <<<"$PAYLOAD")"
+          MSG=""
+          if [ "${CLAUDE_NOTIFY_SUMMARIZE:-1}" = 1 ] && [ -n "$RAW_TEXT" ] && command -v claude >/dev/null; then
+            SYS="${SYS_COMMON} 반드시 한국어 존댓말 의문형으로 끝맺으세요. '~인가요?', '~할까요?', '~하시겠어요?'처럼 끝내세요."
+            MSG="$(_summarize_with_claude "$RAW_TEXT" "$SYS" "${CLAUDE_NOTIFY_QUESTION_TIMEOUT:-10}")"
+          fi
+          [ -z "$MSG" ] && MSG="${RAW_TEXT:0:$SHORT_MAX_LEN}"
+          [ -z "$MSG" ] && exit 0
+          ALERTER_ARGS=(
+            --title "$TITLE"
+            --message "$MSG"
+            --group "$GROUP_ID"
+            --json
+          )
+          [ -f "${ICON:-}" ] && ALERTER_ARGS+=(--app-icon "$ICON")
+          RESP="$("$ALERTER" "${ALERTER_ARGS[@]}" 2>/dev/null)"
+          CHOICE="$(jq -r '.activationType // empty' <<<"$RESP" 2>/dev/null)"
+          case "$CHOICE" in
+            "contentsClicked"|"actionClicked")
+              open -a "Visual Studio Code" "${CWD:-.}" ;;
+          esac
+        ) >/dev/null 2>&1 &
+        exit 0
+        ;;
+      *) exit 0 ;;
+    esac
     ;;
   Notification)
     RAW_MSG="$(jq -r '.message // "입력이 필요합니다"' <<<"$PAYLOAD")"
     case "$RAW_MSG" in
-      *"waiting for your input"*|*"입력을 기다리"*) exit 0 ;;
-      *"needs your attention"*|*"주의가 필요"*)
-        RAW_MSG="확인이 필요합니다" ;;
+      *"waiting for your input"*|*"입력을 기다리"*|\
+      *"needs your attention"*|*"주의가 필요"*|\
+      *"needs your permission"*|*"권한이 필요"*) exit 0 ;;
     esac
 
-    MSG=""
-    case "$RAW_MSG" in
-      *permission*|*Permission*|*권한*)
-        MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
-        ;;
-      *)
-        TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
-        if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-          # transcript 쓰기가 완료되길 잠시 대기
-          sleep 0.3
-          EXTRACTED="$(_extract_last_assistant_text "$TRANSCRIPT" last)"
-          LAST_TEXT="${EXTRACTED%$'\x1f'*}"
-          FALLBACK="${EXTRACTED##*$'\x1f'}"
-          if [ -n "$LAST_TEXT" ]; then
-            if [ "${CLAUDE_NOTIFY_SUMMARIZE:-1}" = 1 ] && command -v claude >/dev/null; then
-              SYS="${SYS_COMMON} 반드시 한국어 존댓말 의문형으로 끝맺으세요. '~인가요?', '~할까요?', '~하시겠어요?'처럼 끝내세요."
-              MSG="$(_summarize_with_claude "$LAST_TEXT" "$SYS" "${CLAUDE_NOTIFY_QUESTION_TIMEOUT:-10}")"
-            fi
-            [ -z "$MSG" ] && MSG="${FALLBACK}"
-          fi
-        fi
-        [ -z "$MSG" ] && MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
-        ;;
-    esac
+    MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
+    [ -z "$MSG" ] && exit 0
 
-    GROUP_ID="$PROJECT"
+    GROUP_ID="${SESSION_ID}-question"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
     ICON="$ICON_QUESTION"
     ;;
@@ -182,7 +169,7 @@ case "$EVENT" in
     if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
       # transcript 쓰기가 완료되길 잠시 대기
       sleep 0.3
-      EXTRACTED="$(_extract_last_assistant_text "$TRANSCRIPT" first)"
+      EXTRACTED="$(_extract_last_assistant_text "$TRANSCRIPT")"
       LAST_TEXT="${EXTRACTED%$'\x1f'*}"
       FALLBACK="${EXTRACTED##*$'\x1f'}"
     fi
@@ -194,7 +181,7 @@ case "$EVENT" in
     fi
     [ -z "$MSG" ] && MSG="${FALLBACK:-작업이 끝났어요}"
 
-    GROUP_ID="$SESSION_ID"
+    GROUP_ID="${SESSION_ID}-done"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
     ICON="$ICON_DONE"
     ;;
