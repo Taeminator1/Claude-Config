@@ -17,6 +17,13 @@ fi
 ALERTER="/opt/homebrew/bin/alerter"
 SHORT_MAX_LEN="${CLAUDE_NOTIFY_SHORT_MAX:-80}"
 MSG_MAX_LEN="${CLAUDE_NOTIFY_MSG_MAX:-200}"
+if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
+  ICON_QUESTION="$HOME/.claude/hooks/assets/claude-question-dark.webp"
+else
+  ICON_QUESTION="$HOME/.claude/hooks/assets/claude-question-light.webp"
+fi
+ICON_DONE="$HOME/.claude/hooks/assets/claude-done.webp"
+SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 # Extract text from transcript JSONL.
 # mode=first (Stop): last assistant message text; fallback = first non-empty line.
@@ -121,8 +128,6 @@ _summarize_with_claude() {
   printf '%s' "${summary:0:$SHORT_MAX_LEN}"
 }
 
-_SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
-
 case "$EVENT" in
   PreToolUse)
     TOOL_NAME="$(jq -r '.tool_name // empty' <<<"$PAYLOAD")"
@@ -131,11 +136,7 @@ case "$EVENT" in
     MSG="실행 승인이 필요합니다"
     GROUP_ID="$SESSION_ID"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
-    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
-      ICON="$HOME/.claude/hooks/assets/claude-question-dark.webp"
-    else
-      ICON="$HOME/.claude/hooks/assets/claude-question-light.webp"
-    fi
+    ICON="$ICON_QUESTION"
     ;;
   Notification)
     RAW_MSG="$(jq -r '.message // "입력이 필요합니다"' <<<"$PAYLOAD")"
@@ -160,7 +161,7 @@ case "$EVENT" in
           FALLBACK="${EXTRACTED##*$'\x1f'}"
           if [ -n "$LAST_TEXT" ]; then
             if [ "${CLAUDE_NOTIFY_SUMMARIZE:-1}" = 1 ] && command -v claude >/dev/null; then
-              SYS="${_SYS_COMMON} 반드시 한국어 존댓말 의문형으로 끝맺으세요. '~인가요?', '~할까요?', '~하시겠어요?'처럼 끝내세요."
+              SYS="${SYS_COMMON} 반드시 한국어 존댓말 의문형으로 끝맺으세요. '~인가요?', '~할까요?', '~하시겠어요?'처럼 끝내세요."
               MSG="$(_summarize_with_claude "$LAST_TEXT" "$SYS" "${CLAUDE_NOTIFY_QUESTION_TIMEOUT:-10}")"
             fi
             [ -z "$MSG" ] && MSG="${FALLBACK}"
@@ -172,11 +173,7 @@ case "$EVENT" in
 
     GROUP_ID="$PROJECT"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
-    if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
-      ICON="$HOME/.claude/hooks/assets/claude-question-dark.webp"
-    else
-      ICON="$HOME/.claude/hooks/assets/claude-question-light.webp"
-    fi
+    ICON="$ICON_QUESTION"
     ;;
   Stop)
     TRANSCRIPT="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
@@ -192,14 +189,14 @@ case "$EVENT" in
 
     MSG=""
     if [ "${CLAUDE_NOTIFY_SUMMARIZE:-1}" = 1 ] && [ -n "$LAST_TEXT" ] && command -v claude >/dev/null; then
-      SYS="${_SYS_COMMON} 반드시 한국어 존댓말로 끝맺으세요. '~입니다', '~했습니다', '~합니다'처럼 끝내세요."
+      SYS="${SYS_COMMON} 반드시 한국어 존댓말로 끝맺으세요. '~입니다', '~했습니다', '~합니다'처럼 끝내세요."
       MSG="$(_summarize_with_claude "$LAST_TEXT" "$SYS" "${CLAUDE_NOTIFY_TIMEOUT:-30}")"
     fi
     [ -z "$MSG" ] && MSG="${FALLBACK:-작업이 끝났어요}"
 
     GROUP_ID="$SESSION_ID"
     TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
-    ICON="$HOME/.claude/hooks/assets/claude-done.webp"
+    ICON="$ICON_DONE"
     ;;
   *) exit 0 ;;
 esac
