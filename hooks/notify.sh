@@ -13,6 +13,11 @@ if [ -n "$SESSION_ID" ]; then
   SESSION_NAME="$(jq -r --arg sid "$SESSION_ID" \
     'select(.sessionId==$sid) | .name // empty' \
     "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
+  TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
+  if [ -z "$SESSION_NAME" ] && [ -f "${TRANSCRIPT_PATH:-}" ]; then
+    SESSION_NAME="$(grep -a '"type":"ai-title"' "$TRANSCRIPT_PATH" 2>/dev/null \
+      | tail -n1 | jq -r '.aiTitle // empty' 2>/dev/null)"
+  fi
 fi
 ALERTER="/opt/homebrew/bin/alerter"
 SHORT_MAX_LEN="${CLAUDE_NOTIFY_SHORT_MAX:-80}"
