@@ -38,6 +38,11 @@ plans/
 backups/
 plugins/
 
+# Daemon runtime state
+daemon/
+daemon.log
+jobs/
+
 # Local / machine-specific settings
 settings.local.json
 settings.json.bak
