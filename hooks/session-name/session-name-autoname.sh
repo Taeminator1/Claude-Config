@@ -21,33 +21,21 @@ TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD" 2>/dev/null)"
 
 NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
 GRACE_FILE="$HOME/.claude/.session-grace/$SESSION_ID"
-RENUDGE_FILE="$HOME/.claude/.session-renudge/$SESSION_ID"
-CLEARBASE_FILE="$HOME/.claude/.session-clearbase/$SESSION_ID"
 
-# A pending /clear re-nudge forces re-naming even though the old .name persists
-# (Claude Code rebuilds it from the transcript's custom-title across /clear).
-RENUDGE=0
-[ -f "$RENUDGE_FILE" ] && RENUDGE=1
-
-# Naming already finalized this session (auto-applied, or user answered/declined
-# the fallback) -> nothing to do, unless a /clear re-nudge is pending.
-if [ "$RENUDGE" -eq 0 ] && [ -f "$NUDGED_FILE" ]; then
+# Naming already finalized this session (auto-applied, or the user answered /
+# declined the prompt) -> nothing to do.
+if [ -f "$NUDGED_FILE" ]; then
   exit 0
 fi
 
-# Already named and not re-nudging -> record that naming is settled, stop firing.
-if [ "$RENUDGE" -eq 0 ] && [ -n "$(resolve_session_name "$SESSION_ID")" ]; then
+# Already named -> record that naming is settled, stop firing. (After /clear the
+# UserPromptSubmit hook asks synchronously on the first prompt and records the
+# name there, so by this point the session is named or already nudged.)
+if [ -n "$(resolve_session_name "$SESSION_ID")" ]; then
   mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
   : > "$NUDGED_FILE" 2>/dev/null || true
   exit 0
 fi
-
-# After /clear the old ai-title lines persist; only a count above the baseline
-# (captured on the first post-clear prompt) is a NEW title. Don't re-pin the old
-# name. BASE is 0 for normal sessions, so any title counts there.
-BASE=0
-[ -f "$CLEARBASE_FILE" ] && BASE="$(cat "$CLEARBASE_FILE" 2>/dev/null || echo 0)"
-[ "$(count_ai_titles "$TRANSCRIPT_PATH")" -gt "$BASE" ] || exit 0
 
 AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
 
@@ -57,9 +45,9 @@ AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
 bash "$(dirname "$0")/set-session-name.sh" "$SESSION_ID" "$AI_TITLE" >/dev/null 2>&1
 
 # Naming done. Stamp the marker so neither this hook nor the nudge re-acts, and
-# consume the /clear re-nudge flag + baseline + grace so they fire only once.
+# clear the grace marker.
 mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
 : > "$NUDGED_FILE" 2>/dev/null || true
-rm -f "$RENUDGE_FILE" "$CLEARBASE_FILE" "$GRACE_FILE" 2>/dev/null || true
+rm -f "$GRACE_FILE" 2>/dev/null || true
 
 exit 0

@@ -19,14 +19,3 @@ latest_ai_title() {
   grep -a '"type":"ai-title"' "$transcript" 2>/dev/null \
     | tail -n1 | jq -r '.aiTitle // empty' 2>/dev/null
 }
-
-# Print how many ai-title lines a transcript holds (0 if none/missing).
-# Used as a /clear baseline: the pre-clear ai-title lines persist in the same
-# transcript, so a *new* (post-clear) title is detected only when the count rises
-# above the baseline captured right after /clear. Avoids re-pinning the old name.
-count_ai_titles() {
-  local transcript="$1" n
-  [ -n "$transcript" ] && [ -f "$transcript" ] || { printf 0; return 0; }
-  n="$(grep -ac '"type":"ai-title"' "$transcript" 2>/dev/null)"
-  printf '%s' "${n:-0}"
-}

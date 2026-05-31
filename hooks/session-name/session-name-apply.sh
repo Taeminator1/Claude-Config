@@ -28,8 +28,7 @@ if [ "$SOURCE" = "clear" ]; then
   # Clear the per-session naming markers so the fresh conversation re-derives its
   # name from a new ai-title instead of being treated as already-settled.
   rm -f "$HOME/.claude/.session-nudged/$SESSION_ID" \
-        "$HOME/.claude/.session-grace/$SESSION_ID" \
-        "$HOME/.claude/.session-clearbase/$SESSION_ID" 2>/dev/null || true
+        "$HOME/.claude/.session-grace/$SESSION_ID" 2>/dev/null || true
   exit 0
 fi
 
