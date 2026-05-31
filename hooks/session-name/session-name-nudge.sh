@@ -16,9 +16,18 @@ SESSION_ID="$(jq -r '.session_id // empty' <<<"$PAYLOAD" 2>/dev/null)"
 
 TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD" 2>/dev/null)"
 
-SESSION_NAME="$(jq -r --arg sid "$SESSION_ID" \
-  'select(.sessionId==$sid) | .name // empty' \
-  "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
+# Resolve the session's name by scanning session files one at a time. A single
+# malformed JSON aborts a multi-file jq invocation before later files are read,
+# which would miss the match and trigger a spurious nudge -- per-file is robust.
+SESSION_NAME=""
+for f in "$HOME"/.claude/sessions/*.json; do
+  [ -e "$f" ] || continue
+  sid="$(jq -r '.sessionId // empty' "$f" 2>/dev/null)"
+  if [ "$sid" = "$SESSION_ID" ]; then
+    SESSION_NAME="$(jq -r '.name // empty' "$f" 2>/dev/null)"
+    break
+  fi
+done
 
 # A re-nudge flag is dropped by the SessionStart hook on /clear. Honor it BEFORE
 # the named branch: after /clear the session usually still carries the old name

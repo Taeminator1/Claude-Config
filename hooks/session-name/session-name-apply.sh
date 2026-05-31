@@ -25,9 +25,17 @@ if [ "$SOURCE" = "clear" ]; then
   exit 0
 fi
 
-SESSION_NAME="$(jq -r --arg sid "$SESSION_ID" \
-  'select(.sessionId==$sid) | .name // empty' \
-  "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
+# Scan session files one at a time: a single malformed JSON aborts a multi-file
+# jq invocation before later files are read, which would drop the name.
+SESSION_NAME=""
+for f in "$HOME"/.claude/sessions/*.json; do
+  [ -e "$f" ] || continue
+  sid="$(jq -r '.sessionId // empty' "$f" 2>/dev/null)"
+  if [ "$sid" = "$SESSION_ID" ]; then
+    SESSION_NAME="$(jq -r '.name // empty' "$f" 2>/dev/null)"
+    break
+  fi
+done
 [ -z "$SESSION_NAME" ] && exit 0
 
 jq -nc --arg t "$SESSION_NAME" \
