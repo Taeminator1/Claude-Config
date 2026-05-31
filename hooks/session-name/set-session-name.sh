@@ -4,6 +4,8 @@
 # Finds ~/.claude/sessions/<pid>.json whose .sessionId == <session_id> and writes .name.
 set -uo pipefail
 
+source "$(dirname "$0")/lib.sh"
+
 SESSION_ID="${1:-}"
 NAME="${2:-}"
 
@@ -12,15 +14,7 @@ if [ -z "$SESSION_ID" ] || [ -z "$NAME" ]; then
   exit 1
 fi
 
-TARGET=""
-for f in "$HOME"/.claude/sessions/*.json; do
-  [ -e "$f" ] || continue
-  sid="$(jq -r '.sessionId // empty' "$f" 2>/dev/null)"
-  if [ "$sid" = "$SESSION_ID" ]; then
-    TARGET="$f"
-    break
-  fi
-done
+TARGET="$(find_session_file "$SESSION_ID")"
 
 if [ -z "$TARGET" ]; then
   echo "no session file found for session_id=$SESSION_ID (name not set)"

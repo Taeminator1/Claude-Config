@@ -4,6 +4,8 @@
 # Box display relies on hookSpecificOutput.sessionTitle (Claude Code >= 2.1.157).
 set -uo pipefail
 
+source "$(dirname "$0")/lib.sh"
+
 trap 'exit 0' EXIT
 
 PAYLOAD="$(cat)"
@@ -25,20 +27,9 @@ if [ "$SOURCE" = "clear" ]; then
   exit 0
 fi
 
-# Scan session files one at a time: a single malformed JSON aborts a multi-file
-# jq invocation before later files are read, which would drop the name.
-SESSION_NAME=""
-for f in "$HOME"/.claude/sessions/*.json; do
-  [ -e "$f" ] || continue
-  sid="$(jq -r '.sessionId // empty' "$f" 2>/dev/null)"
-  if [ "$sid" = "$SESSION_ID" ]; then
-    SESSION_NAME="$(jq -r '.name // empty' "$f" 2>/dev/null)"
-    break
-  fi
-done
+SESSION_NAME="$(resolve_session_name "$SESSION_ID")"
 [ -z "$SESSION_NAME" ] && exit 0
 
-jq -nc --arg t "$SESSION_NAME" \
-  '{hookSpecificOutput:{hookEventName:"SessionStart",sessionTitle:$t}}'
+emit_session_title SessionStart "$SESSION_NAME"
 
 exit 0
