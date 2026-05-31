@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/notify.sh"
+            "command": "bash ~/.claude/hooks/notify/notify.sh"
           }
         ]
       }
@@ -33,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/notify.sh"
+            "command": "bash ~/.claude/hooks/notify/notify.sh"
           }
         ]
       }
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/notify.sh"
+            "command": "bash ~/.claude/hooks/notify/notify.sh"
           }
         ]
       }

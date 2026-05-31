@@ -23,11 +23,11 @@ ALERTER="/opt/homebrew/bin/alerter"
 SHORT_MAX_LEN="${CLAUDE_NOTIFY_SHORT_MAX:-80}"
 MSG_MAX_LEN="${CLAUDE_NOTIFY_MSG_MAX:-200}"
 if [ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" = "Dark" ]; then
-  ICON_QUESTION="$HOME/.claude/hooks/assets/claude-question-dark.webp"
+  ICON_QUESTION="$HOME/.claude/hooks/notify/assets/claude-question-dark.webp"
 else
-  ICON_QUESTION="$HOME/.claude/hooks/assets/claude-question-light.webp"
+  ICON_QUESTION="$HOME/.claude/hooks/notify/assets/claude-question-light.webp"
 fi
-ICON_DONE="$HOME/.claude/hooks/assets/claude-done.webp"
+ICON_DONE="$HOME/.claude/hooks/notify/assets/claude-done.webp"
 SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 # Extract text from transcript JSONL for Stop event.
