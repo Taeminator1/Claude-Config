@@ -157,7 +157,8 @@ case "$EVENT" in
     case "$RAW_MSG" in
       *"waiting for your input"*|*"입력을 기다리"*|\
       *"needs your attention"*|*"주의가 필요"*|\
-      *"needs your permission"*|*"권한이 필요"*) exit 0 ;;
+      *"needs your permission"*|*"권한이 필요"*|\
+      *"needs your approval"*|*"승인이 필요"*) exit 0 ;;
     esac
 
     MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
