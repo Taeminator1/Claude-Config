@@ -26,6 +26,15 @@
             "command": "bash ~/.claude/hooks/notify/notify.sh"
           }
         ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/notify/notify.sh"
+          }
+        ]
       }
     ],
     "Notification": [
