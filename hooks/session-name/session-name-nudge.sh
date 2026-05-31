@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook. Two jobs, mutually exclusive by session state:
-#   1. Session already has a `.name` -> emit it as `sessionTitle` so the live
-#      prompt-bar box shows it (and keeps showing it, overriding the auto-titler).
-#   2. Session has no `.name` -> inject context asking Claude to nudge the
-#      user to name the session.
+# UserPromptSubmit hook. Jobs, by session state:
+#   1. Session has a `.name` -> emit it as `sessionTitle` so the live prompt-bar
+#      box shows it (and keeps showing it, overriding the auto-titler).
+#   2. Session unnamed, ai-title already exists -> apply it silently (covers
+#      resume / pre-existing ai-title before any Stop hook fires this session).
+#   3. Session unnamed, no ai-title yet -> wait one turn (the Stop hook names it
+#      after the response). Only if an ai-title still never appears do we fall
+#      back to ASKING the user via AskUserQuestion choices.
+# Auto-naming itself happens in session-name-autoname.sh (Stop hook); this hook
+# is the live-box display plus the no-ai-title fallback.
 # Box display relies on hookSpecificOutput.sessionTitle (Claude Code >= 2.1.157).
 set -uo pipefail
 
@@ -20,14 +25,19 @@ TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD" 2>/dev/null)"
 
 SESSION_NAME="$(resolve_session_name "$SESSION_ID")"
 
+NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
+GRACE_FILE="$HOME/.claude/.session-grace/$SESSION_ID"
+RENUDGE_FILE="$HOME/.claude/.session-renudge/$SESSION_ID"
+
 # A re-nudge flag is dropped by the SessionStart hook on /clear. Honor it BEFORE
 # the named branch: after /clear the session usually still carries the old name
 # (CC restores it from the transcript), so without this we'd just re-show the old
-# title and never re-prompt. Consume the flag so it only fires once.
-FLAG_FILE="$HOME/.claude/.session-renudge/$SESSION_ID"
+# title and never re-name. Consume the flag (and stale markers) so the cleared
+# conversation re-derives its name from a fresh ai-title.
 RENUDGE=0
-if [ -f "$FLAG_FILE" ]; then
-  rm -f "$FLAG_FILE" 2>/dev/null || true
+if [ -f "$RENUDGE_FILE" ]; then
+  rm -f "$RENUDGE_FILE" 2>/dev/null || true
+  rm -f "$NUDGED_FILE" "$GRACE_FILE" 2>/dev/null || true
   RENUDGE=1
 fi
 
@@ -37,27 +47,38 @@ if [ "$RENUDGE" -eq 0 ] && [ -n "$SESSION_NAME" ]; then
   exit 0
 fi
 
-# Nudge at most once per session. A marker records that we've already asked,
-# regardless of whether a name was ever recorded. Without it, sessions where
-# .name stays null forever (ai-title not yet generated, or user picked "아무
-# 작업도 하지 않기") would re-prompt on every single prompt. The /clear re-nudge
-# (RENUDGE) bypasses this gate and re-stamps the marker below.
-NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
+# Naming already finalized (auto-applied by the Stop hook, or user answered /
+# declined the fallback). Don't re-act. /clear (RENUDGE) cleared this above.
 if [ "$RENUDGE" -eq 0 ] && [ -f "$NUDGED_FILE" ]; then
   exit 0
 fi
 
-# We are nudging now; stamp the marker so we don't ask again this session.
+# Unnamed (or re-nudging). If an ai-title already exists, apply it now and show
+# it -- covers resume / a title generated before any Stop hook fired this run.
+AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
+if [ -n "$AI_TITLE" ]; then
+  bash "$(dirname "$0")/set-session-name.sh" "$SESSION_ID" "$AI_TITLE" >/dev/null 2>&1
+  mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
+  : > "$NUDGED_FILE" 2>/dev/null || true
+  emit_session_title UserPromptSubmit "$AI_TITLE"
+  exit 0
+fi
+
+# No ai-title yet. Give it a grace turn: the Stop hook after this response will
+# name the session silently. Only on a *later* prompt that STILL has no ai-title
+# do we fall back to asking the user.
+if [ ! -f "$GRACE_FILE" ]; then
+  mkdir -p "$HOME/.claude/.session-grace" 2>/dev/null || true
+  : > "$GRACE_FILE" 2>/dev/null || true
+  exit 0
+fi
+
+# Fallback: an ai-title never materialized across a full turn. Ask the user to
+# pick a name via AskUserQuestion. Stamp the nudged marker so we ask only once.
 mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
 : > "$NUDGED_FILE" 2>/dev/null || true
 
-if [ "$RENUDGE" -eq 1 ]; then
-  LEAD="방금 /clear로 대화가 초기화되었습니다. 이전 세션 이름이 그대로 남아 있을 수 있으니, 이번 대화에 맞는 이름을 새로 정합니다."
-else
-  LEAD="이 세션은 아직 이름(.name)이 없습니다."
-fi
-
-CONTEXT="${LEAD} 사용자의 이번 요청에 대한 답변을 만들기 전에, 먼저 AskUserQuestion 도구로 이 세션의 이름을 짧게 무엇으로 할지 사용자에게 존댓말로 물어보세요. 선택지는 다음 순서로 구성하세요: 1번 선택지는 '현재 타이틀을 사용하고 없으면 추가하지 않습니다.'로 넣고, 그다음 사용자의 이번 요청 내용을 기반으로 추천 세션 이름 1~2개를 제시하고, 마지막 선택지로 '아무 작업도 하지 않기'를 넣으세요. 사용자가 1번을 선택하면 다음을 실행해 자동 생성된 제목을 이름으로 기록하세요: bash ~/.claude/hooks/session-name/set-session-name-from-ai-title.sh ${SESSION_ID} \"${TRANSCRIPT_PATH}\". 사용자가 추천 이름이나 직접 입력한 이름을 주면 다음을 실행해 기록하세요: bash ~/.claude/hooks/session-name/set-session-name.sh ${SESSION_ID} \"<이름>\". (session_id=${SESSION_ID}) 사용자가 '아무 작업도 하지 않기'를 선택하면 이름을 기록하지 말고 곧바로 원래 요청을 처리하세요. 셋 중 하나를 처리한 뒤 원래 요청을 처리하세요."
+CONTEXT="이 세션은 아직 이름(.name)이 없고 자동 제목(ai-title)도 생성되지 않았습니다. 사용자의 이번 요청에 대한 답변을 만들기 전에, 먼저 AskUserQuestion 도구로 이 세션의 이름을 짧게 무엇으로 할지 사용자에게 존댓말로 물어보세요. 선택지는 다음 순서로 구성하세요: 사용자의 이번 요청 내용을 기반으로 추천 세션 이름 1~2개를 먼저 제시하고, 마지막 선택지로 '아무 작업도 하지 않기'를 넣으세요. 사용자가 추천 이름이나 직접 입력한 이름을 주면 다음을 실행해 기록하세요: bash ~/.claude/hooks/session-name/set-session-name.sh ${SESSION_ID} \"<이름>\". (session_id=${SESSION_ID}) 사용자가 '아무 작업도 하지 않기'를 선택하면 이름을 기록하지 말고 곧바로 원래 요청을 처리하세요. 둘 중 하나를 처리한 뒤 원래 요청을 처리하세요."
 
 jq -nc --arg ctx "$CONTEXT" \
   '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$ctx}}'

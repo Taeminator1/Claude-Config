@@ -5,6 +5,8 @@
 # newest one is used. Falls back with a message if none exists yet.
 set -uo pipefail
 
+source "$(dirname "$0")/../lib.sh"
+
 SESSION_ID="${1:-}"
 TRANSCRIPT_PATH="${2:-}"
 
@@ -18,8 +20,7 @@ if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
 fi
 
-AI_TITLE="$(grep -a '"type":"ai-title"' "$TRANSCRIPT_PATH" 2>/dev/null \
-  | tail -n1 | jq -r '.aiTitle // empty' 2>/dev/null)"
+AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
 
 if [ -z "$AI_TITLE" ]; then
   echo "no ai-title generated yet; pick a name manually"

@@ -19,6 +19,7 @@ projects/
 history.jsonl
 .session-renudge/
 .session-nudged/
+.session-grace/
 
 # Caveman runtime state
 .caveman-active
