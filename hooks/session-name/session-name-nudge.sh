@@ -47,6 +47,20 @@ if [ "$RENUDGE" -eq 0 ] && [ -n "$SESSION_NAME" ]; then
   exit 0
 fi
 
+# Nudge at most once per session. A marker records that we've already asked,
+# regardless of whether a name was ever recorded. Without it, sessions where
+# .name stays null forever (ai-title not yet generated, or user picked "아무
+# 작업도 하지 않기") would re-prompt on every single prompt. The /clear re-nudge
+# (RENUDGE) bypasses this gate and re-stamps the marker below.
+NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
+if [ "$RENUDGE" -eq 0 ] && [ -f "$NUDGED_FILE" ]; then
+  exit 0
+fi
+
+# We are nudging now; stamp the marker so we don't ask again this session.
+mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
+: > "$NUDGED_FILE" 2>/dev/null || true
+
 if [ "$RENUDGE" -eq 1 ]; then
   LEAD="방금 /clear로 대화가 초기화되었습니다. 이전 세션 이름이 그대로 남아 있을 수 있으니, 이번 대화에 맞는 이름을 새로 정합니다."
 else
