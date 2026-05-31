@@ -17,6 +17,7 @@ tasks/
 sessions/
 projects/
 history.jsonl
+.session-renudge/
 
 # Caveman runtime state
 .caveman-active
