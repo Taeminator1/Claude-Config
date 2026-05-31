@@ -5,7 +5,7 @@
 # newest one is used. Falls back with a message if none exists yet.
 set -uo pipefail
 
-source "$(dirname "$0")/../lib.sh"
+source "$(dirname "$0")/lib.sh"
 
 SESSION_ID="${1:-}"
 TRANSCRIPT_PATH="${2:-}"
