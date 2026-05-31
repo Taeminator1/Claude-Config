@@ -29,27 +29,25 @@ NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
 GRACE_FILE="$HOME/.claude/.session-grace/$SESSION_ID"
 RENUDGE_FILE="$HOME/.claude/.session-renudge/$SESSION_ID"
 
-# A re-nudge flag is dropped by the SessionStart hook on /clear. Honor it BEFORE
-# the named branch: after /clear the session usually still carries the old name
-# (CC restores it from the transcript), so without this we'd just re-show the old
-# title and never re-name. Consume the flag (and stale markers) so the cleared
-# conversation re-derives its name from a fresh ai-title.
-RENUDGE=0
+# A re-nudge flag is dropped by the SessionStart hook on /clear. While it is
+# pending, defer ALL naming to the Stop hook: it re-derives the name from the
+# post-/clear ai-title and consumes the flag. We must NOT consume it here or
+# apply an ai-title now -- right after /clear the transcript's *latest* ai-title
+# is still the STALE pre-clear one, so applying it would re-pin the old name and
+# stamp the nudged marker, blocking the Stop hook from ever re-naming.
 if [ -f "$RENUDGE_FILE" ]; then
-  rm -f "$RENUDGE_FILE" 2>/dev/null || true
-  rm -f "$NUDGED_FILE" "$GRACE_FILE" 2>/dev/null || true
-  RENUDGE=1
+  exit 0
 fi
 
-# Named (and not a pending re-nudge) -> show it in the live box every prompt.
-if [ "$RENUDGE" -eq 0 ] && [ -n "$SESSION_NAME" ]; then
+# Named -> show it in the live box every prompt.
+if [ -n "$SESSION_NAME" ]; then
   emit_session_title UserPromptSubmit "$SESSION_NAME"
   exit 0
 fi
 
 # Naming already finalized (auto-applied by the Stop hook, or user answered /
-# declined the fallback). Don't re-act. /clear (RENUDGE) cleared this above.
-if [ "$RENUDGE" -eq 0 ] && [ -f "$NUDGED_FILE" ]; then
+# declined the fallback). Don't re-act.
+if [ -f "$NUDGED_FILE" ]; then
   exit 0
 fi
 
