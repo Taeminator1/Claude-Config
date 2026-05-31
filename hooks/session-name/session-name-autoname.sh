@@ -20,7 +20,9 @@ SESSION_ID="$(jq -r '.session_id // empty' <<<"$PAYLOAD" 2>/dev/null)"
 TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD" 2>/dev/null)"
 
 NUDGED_FILE="$HOME/.claude/.session-nudged/$SESSION_ID"
+GRACE_FILE="$HOME/.claude/.session-grace/$SESSION_ID"
 RENUDGE_FILE="$HOME/.claude/.session-renudge/$SESSION_ID"
+CLEARBASE_FILE="$HOME/.claude/.session-clearbase/$SESSION_ID"
 
 # A pending /clear re-nudge forces re-naming even though the old .name persists
 # (Claude Code rebuilds it from the transcript's custom-title across /clear).
@@ -40,6 +42,13 @@ if [ "$RENUDGE" -eq 0 ] && [ -n "$(resolve_session_name "$SESSION_ID")" ]; then
   exit 0
 fi
 
+# After /clear the old ai-title lines persist; only a count above the baseline
+# (captured on the first post-clear prompt) is a NEW title. Don't re-pin the old
+# name. BASE is 0 for normal sessions, so any title counts there.
+BASE=0
+[ -f "$CLEARBASE_FILE" ] && BASE="$(cat "$CLEARBASE_FILE" 2>/dev/null || echo 0)"
+[ "$(count_ai_titles "$TRANSCRIPT_PATH")" -gt "$BASE" ] || exit 0
+
 AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
 
 # No ai-title yet -> leave everything as-is; a later Stop will retry.
@@ -48,9 +57,9 @@ AI_TITLE="$(latest_ai_title "$TRANSCRIPT_PATH")"
 bash "$(dirname "$0")/set-session-name.sh" "$SESSION_ID" "$AI_TITLE" >/dev/null 2>&1
 
 # Naming done. Stamp the marker so neither this hook nor the nudge re-acts, and
-# consume the /clear re-nudge flag so it fires only once.
+# consume the /clear re-nudge flag + baseline + grace so they fire only once.
 mkdir -p "$HOME/.claude/.session-nudged" 2>/dev/null || true
 : > "$NUDGED_FILE" 2>/dev/null || true
-rm -f "$RENUDGE_FILE" 2>/dev/null || true
+rm -f "$RENUDGE_FILE" "$CLEARBASE_FILE" "$GRACE_FILE" 2>/dev/null || true
 
 exit 0
