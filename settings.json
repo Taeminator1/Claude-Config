@@ -56,6 +56,12 @@
             "command": "\"/usr/local/bin/node\" \"/Users/taeminyun/.claude/hooks/caveman-activate.js\"",
             "timeout": 5,
             "statusMessage": "Loading caveman mode..."
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/session-name/session-name-apply.sh",
+            "timeout": 5,
+            "statusMessage": "Checking session name..."
           }
         ]
       }
@@ -68,6 +74,12 @@
             "command": "\"/usr/local/bin/node\" \"/Users/taeminyun/.claude/hooks/caveman-mode-tracker.js\"",
             "timeout": 5,
             "statusMessage": "Tracking caveman mode..."
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/session-name/session-name-nudge.sh",
+            "timeout": 5,
+            "statusMessage": "Checking session name..."
           }
         ]
       }
