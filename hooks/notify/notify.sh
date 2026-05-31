@@ -3,6 +3,8 @@ set -uo pipefail
 
 [ "${CLAUDE_NOTIFY_DISABLE:-}" = 1 ] && exit 0
 
+source "$(dirname "$0")/../lib.sh"
+
 PAYLOAD="$(cat)"
 EVENT="$(jq -r '.hook_event_name // empty' <<<"$PAYLOAD")"
 CWD="$(jq -r '.cwd // empty' <<<"$PAYLOAD")"
@@ -10,9 +12,7 @@ PROJECT="$(basename "${CWD:-unknown}")"
 SESSION_ID="$(jq -r '.session_id // empty' <<<"$PAYLOAD")"
 SESSION_NAME=""
 if [ -n "$SESSION_ID" ]; then
-  SESSION_NAME="$(jq -r --arg sid "$SESSION_ID" \
-    'select(.sessionId==$sid) | .name // empty' \
-    "$HOME"/.claude/sessions/*.json 2>/dev/null | head -n1)"
+  SESSION_NAME="$(resolve_session_name "$SESSION_ID")"
   TRANSCRIPT_PATH="$(jq -r '.transcript_path // empty' <<<"$PAYLOAD")"
   if [ -z "$SESSION_NAME" ] && [ -f "${TRANSCRIPT_PATH:-}" ]; then
     SESSION_NAME="$(grep -a '"type":"ai-title"' "$TRANSCRIPT_PATH" 2>/dev/null \
@@ -28,6 +28,8 @@ else
   ICON_QUESTION="$HOME/.claude/hooks/notify/assets/claude-question-light.webp"
 fi
 ICON_DONE="$HOME/.claude/hooks/notify/assets/claude-done.webp"
+TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+QUESTION_GROUP="${SESSION_ID}-question"
 SYS_COMMON="당신은 요약기입니다. ${SHORT_MAX_LEN}자 이하, 마크다운/따옴표/이모지 사용 금지, 출력은 요약 문장 한 줄만. 입력으로 받은 텍스트를 한국어 한 줄로 요약하세요."
 
 # Extract text from transcript JSONL for Stop event.
@@ -110,20 +112,31 @@ _summarize_with_claude() {
   printf '%s' "${summary:0:$SHORT_MAX_LEN}"
 }
 
+# Fire an alerter notification and open VS Code if the user clicks it.
+# Usage: _notify_and_open <title> <message> <group> [icon]
+_notify_and_open() {
+  local title="$1" msg="$2" group="$3" icon="${4:-}"
+  local args=( --title "$title" --message "$msg" --group "$group" --json )
+  [ -f "$icon" ] && args+=( --app-icon "$icon" )
+  local resp choice
+  resp="$("$ALERTER" "${args[@]}" 2>/dev/null)"
+  choice="$(jq -r '.activationType // empty' <<<"$resp" 2>/dev/null)"
+  case "$choice" in
+    contentsClicked|actionClicked) open -a "Visual Studio Code" "${CWD:-.}" ;;
+  esac
+}
+
 case "$EVENT" in
   PreToolUse)
     TOOL_NAME="$(jq -r '.tool_name // empty' <<<"$PAYLOAD")"
     case "$TOOL_NAME" in
       ExitPlanMode)
         MSG="실행 승인이 필요합니다"
-        GROUP_ID="${SESSION_ID}-question"
-        TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+        GROUP_ID="$QUESTION_GROUP"
         ICON="$ICON_QUESTION"
         ;;
       AskUserQuestion)
         ICON="$ICON_QUESTION"
-        GROUP_ID="${SESSION_ID}-question"
-        TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
         (
           RAW_TEXT="$(jq -r '[.tool_input.questions[].question // empty] | join(" / ")' <<<"$PAYLOAD")"
           MSG=""
@@ -133,19 +146,7 @@ case "$EVENT" in
           fi
           [ -z "$MSG" ] && MSG="${RAW_TEXT:0:$SHORT_MAX_LEN}"
           [ -z "$MSG" ] && exit 0
-          ALERTER_ARGS=(
-            --title "$TITLE"
-            --message "$MSG"
-            --group "$GROUP_ID"
-            --json
-          )
-          [ -f "${ICON:-}" ] && ALERTER_ARGS+=(--app-icon "$ICON")
-          RESP="$("$ALERTER" "${ALERTER_ARGS[@]}" 2>/dev/null)"
-          CHOICE="$(jq -r '.activationType // empty' <<<"$RESP" 2>/dev/null)"
-          case "$CHOICE" in
-            "contentsClicked"|"actionClicked")
-              open -a "Visual Studio Code" "${CWD:-.}" ;;
-          esac
+          _notify_and_open "$TITLE" "$MSG" "$QUESTION_GROUP" "$ICON"
         ) >/dev/null 2>&1 &
         exit 0
         ;;
@@ -164,8 +165,7 @@ case "$EVENT" in
     MSG="${RAW_MSG:0:$MSG_MAX_LEN}"
     [ -z "$MSG" ] && exit 0
 
-    GROUP_ID="${SESSION_ID}-question"
-    TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
+    GROUP_ID="$QUESTION_GROUP"
     ICON="$ICON_QUESTION"
     ;;
   Stop)
@@ -188,28 +188,11 @@ case "$EVENT" in
     [ -z "$MSG" ] && MSG="${FALLBACK:-작업이 끝났어요}"
 
     GROUP_ID="${SESSION_ID}-done"
-    TITLE="[$PROJECT] ${SESSION_NAME:-undefined}"
     ICON="$ICON_DONE"
     ;;
   *) exit 0 ;;
 esac
 
-ALERTER_ARGS=(
-  --title "$TITLE"
-  --message "$MSG"
-  --group "$GROUP_ID"
-  --json
-)
-
-[ -f "${ICON:-}" ] && ALERTER_ARGS+=(--app-icon "$ICON")
-
-(
-  RESP="$("$ALERTER" "${ALERTER_ARGS[@]}" 2>/dev/null)"
-  CHOICE="$(jq -r '.activationType // empty' <<<"$RESP" 2>/dev/null)"
-  case "$CHOICE" in
-    "contentsClicked"|"actionClicked")
-      open -a "Visual Studio Code" "${CWD:-.}" ;;
-  esac
-) >/dev/null 2>&1 &
+_notify_and_open "$TITLE" "$MSG" "$GROUP_ID" "${ICON:-}" >/dev/null 2>&1 &
 
 exit 0

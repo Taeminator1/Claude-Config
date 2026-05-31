@@ -4,7 +4,7 @@
 # Finds ~/.claude/sessions/<pid>.json whose .sessionId == <session_id> and writes .name.
 set -uo pipefail
 
-source "$(dirname "$0")/lib.sh"
+source "$(dirname "$0")/../lib.sh"
 
 SESSION_ID="${1:-}"
 NAME="${2:-}"

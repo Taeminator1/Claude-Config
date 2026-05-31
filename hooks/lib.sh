@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for the session-name hooks. Source this; do not execute.
+# Shared helpers for the session-name and notify hooks. Source this; do not execute.
 # Centralizes the session-file scan and the sessionTitle JSON emit so the
 # correctness-sensitive logic (per-file scanning) lives in exactly one place.
 

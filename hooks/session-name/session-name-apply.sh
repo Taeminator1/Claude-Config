@@ -4,7 +4,7 @@
 # Box display relies on hookSpecificOutput.sessionTitle (Claude Code >= 2.1.157).
 set -uo pipefail
 
-source "$(dirname "$0")/lib.sh"
+source "$(dirname "$0")/../lib.sh"
 
 trap 'exit 0' EXIT
 
